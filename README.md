@@ -17,6 +17,7 @@ Welcome! Here you'll find all the projects and coursework I completed during my 
 <summary>Operating systems for parallel and distributed architectures</summary>
 
 > Hands-on course focused on parallel cluster systems - from hardware and software architecture to building, installing, configuring, maintaining, and troubleshooting clusters.
+</details>
 
 <details>
 <summary>Formal models of concurrent processes</summary>
