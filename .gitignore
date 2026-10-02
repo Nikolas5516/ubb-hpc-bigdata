@@ -1,0 +1,51 @@
+# Local database/runtime data
+mysql_data/
+data/
+db_data/
+tmp/
+temp/
+*.log
+*.pid
+*.sock
+*.sqlite
+*.sqlite3
+*.db
+*.bak
+*.dump
+
+# Local environment secrets
+.env
+.env.*
+*.env
+
+# Docker overrides and local config
+compose.override.yml
+docker-compose.override.yml
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary artifacts
+*.tmp
+*.orig
+
+# Common generated files you usually do not want tracked
+coverage/
+build/
+out/
+results/
+
+# Notebook checkpoints 
+.ipynb_checkpoints/
+
+# Python venvs
+.venv/
+venv/
+__pycache__/
+*.pyc
