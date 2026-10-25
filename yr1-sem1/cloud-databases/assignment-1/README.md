@@ -74,6 +74,16 @@ docker compose down -v
 
 Removes the container, network, and named volume. The next `docker compose up` starts from a blank slate.
 
+## Install the A1 advanced features (bonus)
+
+After the main pipeline, run:
+
+```powershell
+docker compose exec mysql sh -c "mysql -uroot -proot football < /sql/06_advanced_a1.sql"
+```
+
+Installs 6 triggers (BEFORE UPDATE / BEFORE DELETE on each bitemporal table) and 10 stored procedures that encapsulate the common bitemporal write patterns. The file ends with a verification pass — two PASS lines prove the triggers reject direct business-column UPDATEs and all DELETEs — plus a transactional procedure demo that is rolled back so no data persists. See `report.md` §12 for the design.
+
 ## Reproduce the §8 EXPLAIN benchmark
 
 The composite index `ix_contract_asof (player_id, tx_to, valid_from)` is also the FK support index for `player_id`, so `DROP INDEX` fails with error 1553. Swap in a plain FK index first:

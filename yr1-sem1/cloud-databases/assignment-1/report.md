@@ -213,8 +213,6 @@ Seven wrong turns caught during review are documented in detail in `story-log.md
 
 ### What this design does not do
 
-**No stored procedures or triggers.** All writes are plain SQL statements wrapped in BEGIN/COMMIT.
-
 **No native temporal syntax.** MySQL has none. Advanced Part A2 would replace our manual close-and-insert mechanics with declarative statements.
 
 **No distributed scaling.** Single-node MySQL. Our workload fits comfortably on one machine (65 players, 137 version rows, kilobytes of data).
@@ -230,7 +228,7 @@ Course 2-2 scores temporal implementation approaches across four dimensions. Our
 | Dimension | Rating | Rationale |
 |-----------|--------|-----------|
 | VT + TT clocks | **Strong** | Both axes modelled explicitly as four period columns; both queryable |
-| Tamper resistance | **Weak** | No triggers — direct SQL can bypass bitemporal conventions. A DBA with write access can delete rows or forge `tx_from` values. A1 would move this to medium |
+| Tamper resistance | **Medium** (with A1) | BEFORE UPDATE/DELETE triggers on all three bitemporal tables forbid mutation of any business column and all DELETEs; stored procedures encapsulate the common write patterns. Ceiling: a DBA with ALTER privileges can still drop the triggers themselves — the unavoidable limit of in-engine protection. See §12 |
 | Query ergonomics | **Medium** | `query_params` workaround for parameterised views; views coalesce by hand; the three-answer query is readable but verbose. A2 would move this to strong (declarative `FOR SYSTEM_TIME AS OF`) |
 | Retention control | **Strong** | We never delete. Retention is purely a function of `tx_to` filtering. Views can be defined to hide any history older than a cutoff |
 
@@ -238,6 +236,22 @@ The design makes an explicit trade: full bitemporal correctness and auditability
 
 ---
 
-## 12. Appendix
+## 12. A1 — Triggers and stored procedures
+
+File: `sql/06_advanced_a1.sql`. Runs after the main pipeline, does not modify any existing data.
+
+**Triggers (6).** `BEFORE UPDATE` on each of the three bitemporal tables rejects any statement that (a) changes a business column, (b) modifies a row whose `tx_to` is not the sentinel, or (c) sets `tx_to` outside the open interval `(tx_from, sentinel)`. `BEFORE DELETE` on each table rejects deletes unconditionally. All rejections use `SIGNAL SQLSTATE '45000'` with a descriptive message.
+
+**Stored procedures (10).** `p_tx_begin(author, reason, sim_now, OUT tx_id)` opens a `tx_registry` entry and returns its id. For each bitemporal table there is `p_<t>_insert(business_cols..., valid_from, valid_to, sim_now, tx_id)`, `p_<t>_close(business_key, sim_now)` which closes all currently-believed rows for that key, and `p_<t>_close_at(version_id, sim_now)` which closes a specific row (for surgical E4 corrections like events 22 and 32).
+
+**Verification.** The file ends with `CALL p_demo_tamper_update()` and `CALL p_demo_tamper_delete()`, which attempt the forbidden operations inside `DECLARE EXIT HANDLER FOR SQLSTATE '45000'` blocks and report PASS/FAIL. Both PASS on install. A positive demo then runs `p_tx_begin → p_contract_close → p_contract_insert` on Pennington inside a transaction and `ROLLBACK`s, proving the procedure workflow works end-to-end without leaving any persistent change.
+
+**Compatibility with the existing pipeline.** The triggers permit `UPDATE ... SET tx_to = <value>` on currently-believed rows, which is the only UPDATE shape used in `03_timeline.sql`. The main pipeline continues to run unchanged after A1 is installed — the triggers are additive protection, not a replacement for the existing event scripts.
+
+**Effect on §11 decision guide.** Tamper resistance moves from weak to medium. A DBA with ALTER privileges can still drop the triggers; that is the ceiling of what in-engine protection can achieve without external audit infrastructure.
+
+---
+
+## 13. Appendix
 
 Project layout, prerequisites, run instructions, and reproduction steps live in the repository `README.md`.
