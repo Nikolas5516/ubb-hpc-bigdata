@@ -213,8 +213,6 @@ Seven wrong turns caught during review are documented in detail in `story-log.md
 
 ### What this design does not do
 
-**No native temporal syntax.** MySQL has none. Advanced Part A2 would replace our manual close-and-insert mechanics with declarative statements.
-
 **No distributed scaling.** Single-node MySQL. Our workload fits comfortably on one machine (65 players, 137 version rows, kilobytes of data).
 
 **No GDPR erasure.** Our "never delete" rule means a player's historical rows persist indefinitely. A real system would need a documented retention policy and a tombstone mechanism.
@@ -229,7 +227,7 @@ Course 2-2 scores temporal implementation approaches across four dimensions. Our
 |-----------|--------|-----------|
 | VT + TT clocks | **Strong** | Both axes modelled explicitly as four period columns; both queryable |
 | Tamper resistance | **Medium** (with A1) | BEFORE UPDATE/DELETE triggers on all three bitemporal tables forbid mutation of any business column and all DELETEs; stored procedures encapsulate the common write patterns. Ceiling: a DBA with ALTER privileges can still drop the triggers themselves — the unavoidable limit of in-engine protection. See §12 |
-| Query ergonomics | **Medium** | `query_params` workaround for parameterised views; views coalesce by hand; the three-answer query is readable but verbose. A2 would move this to strong (declarative `FOR SYSTEM_TIME AS OF`) |
+| Query ergonomics | **Strong** (with A2) | On MySQL, `query_params` workaround for parameterised views and manual bitemporal predicates (medium). On MariaDB via A2, native `PERIOD FOR` + `WITHOUT OVERLAPS` + `FOR SYSTEM_TIME AS OF` collapse the three-answer query to one declarative line and move engine-enforced I1 to the schema. See §13 |
 | Retention control | **Strong** | We never delete. Retention is purely a function of `tx_to` filtering. Views can be defined to hide any history older than a cutoff |
 
 The design makes an explicit trade: full bitemporal correctness and auditability in exchange for medium query ergonomics and weak tamper resistance. A1 and A2 are the paths to lift each weakness in turn.
@@ -252,6 +250,34 @@ File: `sql/06_advanced_a1.sql`. Runs after the main pipeline, does not modify an
 
 ---
 
-## 13. Appendix
+## 13. A2 — MariaDB native temporal
+
+File: `sql/06_advanced_a2.sql`. Runs against a separate MariaDB 11.4 service (profile `a2` in `docker-compose.yml`), scoped so the main MySQL pipeline is unaffected. Three demos on a single `head_coach_bitemporal` table that uses `PERIOD FOR validity`, `WITH SYSTEM VERSIONING`, and `UNIQUE (club_id, validity WITHOUT OVERLAPS)`:
+
+**Demo 1 — WITHOUT OVERLAPS.** Two adjacent half-open periods for the same club are accepted; an overlapping third insert is rejected by the engine with SQLSTATE 23000. Replaces the MySQL discipline of close-before-insert plus the on-demand `v_integrity_violations` check.
+
+**Demo 2 — FOR PORTION OF.** One statement — `UPDATE ... FOR PORTION OF validity FROM X TO Y SET ... WHERE ...` — replaces the three-statement MySQL pattern (close old row, insert amended row, insert new period). The engine splits the row at the boundary and writes the old half to system-versioning history automatically.
+
+**Demo 3 — FOR SYSTEM_TIME AS OF.** The MySQL Q6 view carries four bitemporal predicates (`tx_from <= q.known_at`, `q.known_at < tx_to`, `valid_from <= q.valid_at`, `q.valid_at < valid_to`) plus a one-row `query_params` parameter table. On MariaDB the TT axis collapses to one declarative clause and no parameter table is needed:
+
+```sql
+SELECT coach_name FROM head_coach_bitemporal
+ FOR SYSTEM_TIME AS OF '2026-02-10'
+ WHERE club_id = 5 AND valid_from <= '2026-02-03' AND '2026-02-03' < valid_to;
+```
+
+Three probes with `known_at` set to 2026-02-10 / 2026-02-17 / 2026-10-01 return Whittaker / Delaney / Whittaker — the same three-answer pattern the MySQL side produces for Q6.
+
+**TT backdating note.** MariaDB's system versioning uses the transaction clock for `row_start`, so a straight timeline replay would stamp every row with the actual run date. Demo 3 sets `@@system_versioning_insert_history = 1` for the session, which lets `INSERT` specify `row_start` and `row_end` explicitly. The TIMESTAMP(6) `row_end` max (`'2038-01-19 03:14:07.999999'`) is what MariaDB uses to identify currently-visible rows, so the final belief state is inserted with that explicit `row_end` value. Note that MariaDB requires `TIMESTAMP(6)` (not `DATETIME(6)`) for the system-versioning columns — the MySQL side uses `DATETIME(6)` precisely to escape the 2038 cap, so the two engines take opposite choices on the same decision.
+
+**One further MariaDB behaviour surfaced during replay.** When `system_versioning_insert_history=1`, `AUTO_INCREMENT` does not advance for history inserts — every row otherwise lands with `version_id=0`. Because the internal primary key for system-versioned tables is effectively `(version_id, row_end)`, two rows sharing the same `row_end` then collide on `(0, row_end)`. Demo 3 avoids this by supplying explicit `version_id` values (101–105) for the five backdated rows. This is a general caution for anyone using history-insert mode to replay a timeline rather than relying on the engine clock.
+
+**Effect on §11 decision guide.** Query ergonomics moves from medium to strong on the MariaDB side: the three-answer query goes from a bespoke view + parameter table to one declarative line, and I1 moves from a manual check into the schema.
+
+**Scope.** A2 is a focused demonstration of three native constructs, not a full re-implementation of the 40-event timeline in MariaDB. The constructs shown (`WITHOUT OVERLAPS`, `FOR PORTION OF`, `FOR SYSTEM_TIME AS OF`) are the ones that would collapse the most MySQL code in a full port; the remaining events (E2 proactive, E5 real-world end, E6 restart, E9 cross-table) use the same mechanical close/insert patterns and wouldn't change the ergonomic conclusion.
+
+---
+
+## 14. Appendix
 
 Project layout, prerequisites, run instructions, and reproduction steps live in the repository `README.md`.

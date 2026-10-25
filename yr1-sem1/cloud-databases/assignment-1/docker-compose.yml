@@ -20,5 +20,31 @@ services:
       timeout: 3s
       retries: 10
 
+  # A2 only. Bring up with:
+  #   docker compose --profile a2 up -d mariadb --wait   (works on all compose v2)
+  #   docker compose up -d mariadb                       (compose v2.20+, auto-activates profile)  
+  mariadb:
+    image: mariadb:11.4
+    container_name: cabd_mariadb
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: football
+      TZ: UTC
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./sql:/sql:ro
+      - mariadb_data:/var/lib/mysql        # <-- MariaDB uses /var/lib/mysql
+    command:
+      - --sql_mode=STRICT_ALL_TABLES,NO_ENGINE_SUBSTITUTION,NO_ZERO_DATE,NO_ZERO_IN_DATE,ONLY_FULL_GROUP_BY,ERROR_FOR_DIVISION_BY_ZERO
+      - --default-time-zone=+00:00
+    profiles: ["a2"]                       # keeps it out of default `up`
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   mysql_data:
+  mariadb_data:

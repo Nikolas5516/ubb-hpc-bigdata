@@ -84,6 +84,32 @@ docker compose exec mysql sh -c "mysql -uroot -proot football < /sql/06_advanced
 
 Installs 6 triggers (BEFORE UPDATE / BEFORE DELETE on each bitemporal table) and 10 stored procedures that encapsulate the common bitemporal write patterns. The file ends with a verification pass — two PASS lines prove the triggers reject direct business-column UPDATEs and all DELETEs — plus a transactional procedure demo that is rolled back so no data persists. See `report.md` §12 for the design.
 
+## Install the A2 advanced features (bonus)
+
+A2 runs against a separate MariaDB 11.4 service with its own data volume, scoped behind the `a2` compose profile. Bring it up with:
+
+```powershell
+docker compose --profile a2 up -d mariadb --wait
+docker compose exec mariadb sh -c "mariadb -uroot -proot football < /sql/06_advanced_a2.sql"
+```
+
+Expected tail of output:
+
+```
+Answer 1 (known_at=2026-02-10): expect Whittaker  → Whittaker
+Answer 2 (known_at=2026-02-17): expect Delaney    → Delaney
+Answer 3 (known_at=2026-10-01): expect Whittaker  → Whittaker
+--- A2 install complete ---
+```
+
+Three demos: `WITHOUT OVERLAPS` (engine-enforced I1), `FOR PORTION OF` (one-statement surgical correction), and `FOR SYSTEM_TIME AS OF` (the three-answer test in declarative form). See `report.md` §13.
+
+Reset the MariaDB side only with:
+
+```powershell
+docker compose --profile a2 down -v
+```
+
 ## Reproduce the §8 EXPLAIN benchmark
 
 The composite index `ix_contract_asof (player_id, tx_to, valid_from)` is also the FK support index for `player_id`, so `DROP INDEX` fails with error 1553. Swap in a plain FK index first:
