@@ -4,11 +4,11 @@
 
 The database goes live on **2025-07-01 09:00 UTC** with the pre-season roster of six Premier League clubs: Manchester United, Manchester City, Liverpool, Arsenal, Chelsea, Tottenham Hotspur. **Sixty-five players** (50 primary roster + 15 background anchors with 2028+ contracts to keep the current-facts count stable), seven coaches (six employed, one unaffiliated — Delaney, reserved for the three-answer story), four active loans.
 
-The timeline replays **40 logical changes** across 15 months, ending in late October 2026. Every change is one `tx_registry` entry. The database never overwrites: beliefs are closed in transaction time, never deleted.
+The timeline replays **40 logical changes** across 16 months, ending in late October 2026. Every change is one `tx_registry` entry. The database never overwrites: beliefs are closed in transaction time, never deleted.
 
 **Spans two seasons** (`2024-25` and `2025-26`), both named-period references for Q4. Enters the first weeks of the `2026-27` pre-season at the end.
 
-**Three new coach anchors** are inserted mid-timeline as part of normal personnel turnover (Wagner, Conti). The pre-seeded Delaney (coach 7) activates at Chelsea mid-season. Final `coach` anchor count: 9.
+**Two new coach anchors** are inserted mid-timeline as part of normal personnel turnover (Wagner, Conti). The pre-seeded Delaney (coach 7) activates at Chelsea mid-season. Final `coach` anchor count: 9.
 
 ---
 
@@ -18,11 +18,11 @@ The timeline replays **40 logical changes** across 15 months, ending in late Oct
 |-----|-----------|-----|---------------|-----------|
 | E1 | Initial load — one tx_id | 1 | 1 | 75 |
 | E2 | Proactive (`valid_from > tx_from`) | 3 | 5 | 10 |
-| E3 | Late entry (`tx_from − valid_from ≥ 7 days`) | 5 | 10 | 17 |
+| E3 | Late entry (`tx_from − valid_from ≥ 7 days`) | 5 | 10 | 18 |
 | E4 | Correction (close TT, replace) | 3 | 5 | 8 |
 | E5 | Real-world end (finite `valid_to`) | 5 | 10 | 10 |
 | E6 | Restart after gap (same pair, two valid periods, strict gap) | 3 | 5 (two dual-tagged with E3 — see events 26, 33) | 5 |
-| E7 | Role handovers across ≥2 central objects, ≥1 corrected | 3 | 3 handovers at 3 clubs | 6 |
+| E7 | Role handovers across ≥2 central objects, ≥1 corrected | 3 | 3 handovers at 3 clubs (CHE across 2 transactions) | 8 |
 | E8 | Erroneous insert retracted (TT closed, no replacement) | 1 | 1 | 1 (then 0 at retract) |
 | E9 | One change, ≥2 tables (same tx_id) | 2 | 3 | included in E5/E9 totals |
 
@@ -414,7 +414,7 @@ After event 40, the database should satisfy:
   - contract_version: 111 rows
   - head_coach_version: 14 rows (6 initial + 8 from E7: 2 rows per transaction × 4 transactions in events 12, 16, 17, 19)
   - loan_version: 12 rows (4 initial + 8 from timeline)
-- **≥60 current relationship facts** at wall-clock today (TT-current AND VT-current). Expected: ~65-70 (varies with wall-clock date; the Bradley contract fix extending his TOT deal to 2028-06-30 keeps him current, lifting the count above the ~63 originally planned).
+- **≥60 current relationship facts** at wall-clock today (TT-current AND VT-current). Expected: 63 (57 current contracts + 6 head-coach assignments + 0 current loans), 3 above the 60 minimum.
 - **Zero rows in `v_integrity_violations`** (Q0 of Part C).
 - **Three distinct answers** returned by Q6 at Chelsea with the three fixed `known_at` values above.
 
@@ -459,7 +459,7 @@ Row counts are approximate; final numbers come from the SQL run.
 | Q0 (invariant check) | all events | Should return 0 violations throughout the timeline |
 | Q1 (current snapshot) | all events, final state | Clubs, players, contracts, loans, coaches as known today |
 | Q2 (role tenures with coalescing) | 12, 16, 17, 19 | Head-coach tenures that span corrections |
-| Q3 (proactive and late changes) | 2, 4, 5, 6, 7, 11, 15, 20, 22, 24, 26, 27, 28, 32, 33, 38 | E2/E3/E4 events showing valid-time vs transaction-time drift |
+| Q3 (proactive and late changes) | 2, 4, 5, 6, 7, 11, 15, 16, 17, 20, 22, 24, 26, 27, 28, 32, 33, 35, 38, 40 | E2/E3/E4 events showing valid-time vs transaction-time drift |
 | Q4 (facts valid during a named period) | contracts active during `2025-26` season | Uses the season reference table |
 | Q5 (state at any `known_at`) | 16, 17 (before/after at Chelsea) | Proves TT travel works for arbitrary moments |
 | Q6 (three-answer at Chelsea) | 16, 17 at `valid_at='2026-02-03'` | THE three-answer test |
@@ -472,4 +472,4 @@ This table doubles as a self-check: every Q has at least one feeding event, and 
 
 ## Monotonic tx_from verification
 
-All 40 events have strictly increasing `tx_from` values. Minimum spacing: 5 days (events 3 → 4). Maximum spacing: 36 days (events 14 → 15). No two events share a `tx_from`, satisfying the "each event is its own transaction" convention.
+All 40 events have strictly increasing `tx_from` values. Minimum spacing: 2 days (events 35 → 36). Maximum spacing: 40 days (events 12 → 13). No two events share a `tx_from`, satisfying the "each event is its own transaction" convention.

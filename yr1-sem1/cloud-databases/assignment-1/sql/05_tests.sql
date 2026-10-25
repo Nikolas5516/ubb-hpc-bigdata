@@ -81,7 +81,7 @@ SELECT tx_id, tagged_as, tbl, entity_id, valid_from, tx_date, vt_minus_tt_days
   FROM v_changes
  WHERE signature = 'E3 late entry'
  ORDER BY tx_id;
--- Expected: ~47 rows. The signature "tx_date >= valid_from + 7 days" is OVER-INCLUSIVE
+-- Expected: 49 rows. The signature "tx_date >= valid_from + 7 days" is OVER-INCLUSIVE
 -- vs the authorial E3 tag: it catches true late entries AND amendments of old facts
 -- (e.g., Benali termination's amended row has valid_from=2023-07-01 (original contract
 -- start) and tx_from=2026-01-15, so it reads as a 929-day "late entry" even though it's

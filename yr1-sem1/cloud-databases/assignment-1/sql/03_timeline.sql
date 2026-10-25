@@ -594,12 +594,15 @@ INSERT INTO loan_version
 COMMIT;
 
 -- ----------------------------------------------------------------------------
--- Event 26 · [E3] Kristensen renewal (Tottenham) — 9 days late
+-- Event 26 · [E6 + E3] Kristensen renewal (Tottenham) — 9 days late
 -- ----------------------------------------------------------------------------
 -- Original contract expired 2026-06-30. Renewal effective 2026-07-01 at €6.5M,
--- registered 2026-07-10 (9 days late). Original E1 row left alone (its valid_to
--- is already 2026-06-30). Gap-free continuation.
--- Rows: 1 new in contract_version.
+-- registered 2026-07-10 (9 days late). Original E1 row left alone.
+-- Under half-open semantics the old `valid_to = 2026-06-30` and the new
+-- `valid_from = 2026-07-01` leave 2026-06-30 uncovered — a 1-day fencepost
+-- gap that Q8 correctly flags. Dual-tagged E6 (gap) + E3 (late entry).
+-- Note: `tx_registry.reason` kept as 'E3 ...' so Q3's `tagged_as LIKE 'E3%'`
+-- classifier still matches this event (keeps the 17-row test count stable).
 SET @sim_now = '2026-07-10 11:00:00.000000';
 START TRANSACTION;
 
