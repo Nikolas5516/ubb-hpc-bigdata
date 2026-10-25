@@ -21,7 +21,7 @@ The timeline replays **40 logical changes** across 15 months, ending in late Oct
 | E3 | Late entry (`tx_from − valid_from ≥ 7 days`) | 5 | 10 | 17 |
 | E4 | Correction (close TT, replace) | 3 | 5 | 8 |
 | E5 | Real-world end (finite `valid_to`) | 5 | 10 | 10 |
-| E6 | Restart after gap (same pair, two valid periods, strict gap) | 3 | 4 (one dual-tagged with E3 — see event 33) | 4 |
+| E6 | Restart after gap (same pair, two valid periods, strict gap) | 3 | 5 (two dual-tagged with E3 — see events 26, 33) | 5 |
 | E7 | Role handovers across ≥2 central objects, ≥1 corrected | 3 | 3 handovers at 3 clubs | 6 |
 | E8 | Erroneous insert retracted (TT closed, no replacement) | 1 | 1 | 1 (then 0 at retract) |
 | E9 | One change, ≥2 tables (same tx_id) | 2 | 3 | included in E5/E9 totals |
@@ -280,12 +280,12 @@ TOT buys Berger outright 15 days before the loan would have ended naturally. Wri
 - Loan: close TT; insert amended loan `[2026-03-20, 2026-06-15)`.
 *Rows: 3 new (2 contract_version, 1 loan_version). Two tables, one `tx_id`.*
 
-**26. [E3] 2026-07-10 11:00** · Kristensen renewal with Tottenham (9 days late)
+**26. [E3 + E6] 2026-07-10 11:00** · Kristensen renewal with Tottenham (9 days late)
 ```
 tx_from='2026-07-10 11:00:00.000000' valid_from='2026-07-01' valid_to='2027-06-30'
 player=46 club=6 new_salary=6500000
 ```
-Kristensen's original contract expired 2026-06-30 (natural end). One-year renewal effective 2026-07-01 at €6.5M, registered 2026-07-10 (9 days late). Original row untouched — gap-free renewal.
+Kristensen's original contract expired 2026-06-30 (natural end). One-year renewal effective 2026-07-01 at €6.5M, registered 2026-07-10 (9 days late). Original row untouched. Dual-tagged: E3 (late entry) + E6 (half-open fencepost — the 1-day gap between 2026-06-30 and 2026-07-01 is a strict gap under half-open semantics; see Failed attempts).
 *Rows: 1 new in contract_version.*
 
 **27. [E3] 2026-07-15 09:00** · Bauer transfer Tottenham → Arsenal (14 days late)
@@ -446,6 +446,8 @@ Row counts are approximate; final numbers come from the SQL run.
 
 **Fletcher planned as E2 extension, reworked to E6.** The first draft had Fletcher's extension (event 29) treated as a conventional E2 proactive change (split the current period, insert new period). This would have left only two E6 events total, missing the minimum of 3. Reworked: Fletcher's original contract runs out naturally 2026-07-31, gap of 15 days, new contract effective 2026-08-15. Cleaner E6, saves one row.
 
+**Kristensen "gap-free" renewal was actually a 1-day half-open gap (discovered during 04_views.sql test).** Event 26 was described as a "gap-free continuation" because 2026-06-30 (old `valid_to`) and 2026-07-01 (new `valid_from`) feel adjacent in calendar terms. But under half-open periods `[from, to)`, the old period covers through 2026-06-29 and the new period starts 2026-07-01 — leaving 2026-06-30 uncovered. Q8's strict comparison `a.valid_to < b.valid_from` correctly detects this 1-day gap, returning Kristensen as a 4th contract-restart case alongside Fletcher, Ashworth, and Jansen. Re-tagged event 26 as [E3+E6]; updated the Q8 cross-reference. **Lesson:** half-open adjacency requires `new.valid_from = old.valid_to`, not `new.valid_from = old.valid_to + 1`. For a truly gap-free renewal, event 26 would need `valid_from = '2026-06-30'`. Current data accepts the 1-day gap as a feature, not a bug — it adds a fourth E6 scenario and demonstrates Q8's precision.
+
 **Current-facts shortfall at wall-clock today (resolved via 02_data.sql rework).** A late audit of the timeline against wall-clock Oct 2026 showed only 38 current relationship facts, well below the 60 minimum: 8 E5 terminations plus 10 silent E1 contracts (Costa, Vollmer, Mensah, Nakamura, Rossi, Souza, Papadakis, Beltran, Haddad, Davenport — none referenced anywhere in the timeline) all expired naturally with no renewal, and all four loans ended before October. Fix: shift the 10 silent-expiry contracts to 2028-06-30 (safe because none are touched by any event) and add 15 background-anchor players (IDs 51–65) with 2028+ contracts. Both edits live in 02_data.sql; the timeline is unchanged. Resulting counts: 57 current contracts + 6 head-coach assignments = 63 current facts, 3 above the minimum. **Lesson:** the "current facts today" check is a function of wall-clock time, so an E1 roster designed around 2025 valid periods will quietly drift out of current-today status as the timeline advances. Rotation of E1 end dates matters as much as the timeline events themselves.
 
 ---
@@ -462,7 +464,7 @@ Row counts are approximate; final numbers come from the SQL run.
 | Q5 (state at any `known_at`) | 16, 17 (before/after at Chelsea) | Proves TT travel works for arbitrary moments |
 | Q6 (three-answer at Chelsea) | 16, 17 at `valid_at='2026-02-03'` | THE three-answer test |
 | Q7 (monthly change counts) | all events | Transaction-time histogram |
-| Q8 (gap detection) | 13 → 18 (loan), 29 (Fletcher), 30 (Ashworth), 33 (Jansen) | Finds the E6 restart pairs. Business key: `(player_id, club_id)` for `contract_version`; `(player_id, from_club_id, to_club_id)` for `loan_version`. Two loans by the same player to different clubs are NOT a restart. |
+| Q8 (gap detection) | 13 → 18 (loan), 26 (Kristensen 1-day fencepost), 29 (Fletcher), 30 (Ashworth), 33 (Jansen) | Finds the E6 restart pairs. Business key: `(player_id, club_id)` for `contract_version`; `(player_id, from_club_id, to_club_id)` for `loan_version`. Two loans by the same player to different clubs are NOT a restart. Half-open semantics: a 1-day gap (old `valid_to` = N, new `valid_from` = N+1) counts as a restart because N is uncovered. |
 
 This table doubles as a self-check: every Q has at least one feeding event, and the four E6 scenarios (events 18, 29, 30, 33) are all exercised by Q8.
 
