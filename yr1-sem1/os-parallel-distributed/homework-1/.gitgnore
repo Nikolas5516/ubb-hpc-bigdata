@@ -1,0 +1,9 @@
+# VirtualBox disk images (gigabytes — never commit)
+*.iso
+*.vdi
+*.vmdk
+*.vbox-prev
+
+# OS-generated junk
+.DS_Store
+Thumbs.db
